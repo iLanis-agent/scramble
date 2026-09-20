@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scramble - Speedcubing Timer</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:-apple-system,'Segoe UI',Roboto,sans-serif; background:#0f1318; color:#e6e9ee; min-height:100vh; padding:22px 16px 60px; user-select:none; -webkit-user-select:none; }
+  .wrap { max-width:640px; margin:0 auto; }
+  header { text-align:center; margin-bottom:14px; }
+  header h1 { font-size:26px; letter-spacing:-.5px; }
+  header a { color:#5b8def; font-size:12px; text-decoration:none; }
+  .card { background:#171d25; border:1px solid #232b36; border-radius:14px; padding:16px; margin-bottom:12px; }
+  #scr { text-align:center; font-size:19px; line-height:1.5; letter-spacing:1px; font-weight:600; color:#cfe0ff; min-height:56px; display:flex; align-items:center; justify-content:center; }
+  .scrrow { display:flex; gap:10px; align-items:center; }
+  .scrrow button { margin-left:auto; background:#232b36; color:#9fb3cf; border:none; border-radius:9px; padding:7px 13px; font-size:12px; cursor:pointer; }
+  #timerbox { text-align:center; padding:28px 16px 22px; border-radius:14px; border:1px solid #232b36; background:#171d25; transition:background .15s,border-color .15s; margin-bottom:12px; }
+  #timerbox.ready { background:#0f2b1a; border-color:#22c55e; }
+  #timerbox.holding { background:#2b1414; border-color:#ef4444; }
+  #clock { font-size:76px; font-weight:800; font-variant-numeric:tabular-nums; letter-spacing:-2px; font-family:'SF Mono',Menlo,Consolas,monospace; }
+  #timerbox.ready #clock { color:#4ade80; }
+  #hint { color:#7c8aa0; font-size:12px; margin-top:6px; }
+  .stats { display:grid; grid-template-columns:repeat(5,1fr); gap:8px; margin-bottom:12px; }
+  .stat { background:#171d25; border:1px solid #232b36; border-radius:12px; padding:10px 4px; text-align:center; }
+  .stat .v { font-size:17px; font-weight:700; font-variant-numeric:tabular-nums; }
+  .stat .k { font-size:10px; text-transform:uppercase; letter-spacing:1px; color:#7c8aa0; margin-top:3px; }
+  .shead { display:flex; align-items:center; margin-bottom:8px; }
+  .shead .t { font-size:11px; text-transform:uppercase; letter-spacing:1.5px; color:#7c8aa0; }
+  .shead button { margin-left:auto; background:none; border:none; color:#ef4444; font-size:12px; cursor:pointer; }
+  .srow { display:flex; gap:10px; align-items:baseline; padding:8px 8px; border-radius:9px; font-size:13px; }
+  .srow:nth-child(odd) { background:#1b232e; }
+  .srow .n { color:#55657c; min-width:26px; }
+  .srow .tm { font-weight:700; font-variant-numeric:tabular-nums; min-width:70px; }
+  .srow .sc { color:#7c8aa0; font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }
+  .srow .x { color:#55657c; cursor:pointer; background:none; border:none; font-size:14px; }
+  .srow .x:hover { color:#ef4444; }
+  #empty { color:#55657c; font-size:13px; text-align:center; padding:10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><h1>&#9201; Scramble</h1><a href="index.html">&larr; About</a></header>
+
+  <div class="card scrrow">
+    <div id="scr"></div>
+    <button id="newscr">New scramble</button>
+  </div>
+
+  <div id="timerbox">
+    <div id="clock">0.00</div>
+    <div id="hint">hold SPACE (or touch) to ready &middot; release to start &middot; any key to stop</div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="v" id="stLast">-</div><div class="k">last</div></div>
+    <div class="stat"><div class="v" id="stBest">-</div><div class="k">best</div></div>
+    <div class="stat"><div class="v" id="stAo5">-</div><div class="k">ao5</div></div>
+    <div class="stat"><div class="v" id="stAo12">-</div><div class="k">ao12</div></div>
+    <div class="stat"><div class="v" id="stMean">-</div><div class="k">mean</div></div>
+  </div>
+
+  <div class="card">
+    <div class="shead"><span class="t">Session solves</span><button id="clear">clear session</button></div>
+    <div id="solves"></div>
+  </div>
+</div>
+
+<script>
+var FACES=['U','D','L','R','F','B'];
+var MODS=['',"'",'2'];
+function newScramble(){
+  var out=[], last=-1;
+  while(out.length<21){
+    var f=Math.floor(Math.random()*6);
+    if(f===last) continue;
+    last=f;
+    out.push(FACES[f]+MODS[Math.floor(Math.random()*3)]);
+  }
+  return out.join(' ');
+}
+function fmt(ms){
+  var cs=Math.floor(ms/10)%100, s=Math.floor(ms/1000)%60, m=Math.floor(ms/60000);
+  var cc=String(cs).padStart(2,'0');
+  if(m>0) return m+':'+String(s).padStart(2,'0')+'.'+cc;
+  return s+'.'+cc;
+}
+function ao(arr,n){
+  if(arr.length<n) return null;
+  var last=arr.slice(-n).slice().sort(function(a,b){return a-b;});
+  var mid=last.slice(1,-1);
+  return mid.reduce(function(a,b){return a+b;},0)/mid.length;
+}
+var solves=[];
+try{ solves=JSON.parse(localStorage.getItem('scramble-solves')||'[]'); if(!Array.isArray(solves)) solves=[]; }catch(_){}
+function save(){ try{ localStorage.setItem('scramble-solves',JSON.stringify(solves)); }catch(_){}}
+var scr=newScramble();
+var phase='idle'; // idle | holding | ready | running
+var holdT0=0, startTs=0, elapsed=0, rafT=null;
+function $(id){return document.getElementById(id);}
+function renderScr(){ $('scr').textContent=scr; }
+function renderStats(){
+  var ts=solves.map(function(s){return s.t;});
+  $('stLast').textContent=ts.length?fmt(ts[ts.length-1]):'-';
+  $('stBest').textContent=ts.length?fmt(Math.min.apply(null,ts)):'-';
+  var a5=ao(ts,5), a12=ao(ts,12);
+  $('stAo5').textContent=a5===null?'-':fmt(a5);
+  $('stAo12').textContent=a12===null?'-':fmt(a12);
+  $('stMean').textContent=ts.length?fmt(ts.reduce(function(a,b){return a+b;},0)/ts.length):'-';
+}
+function renderSolves(){
+  if(!solves.length){ $('solves').innerHTML='<div id="empty">No solves yet - your session will show up here.</div>'; return; }
+  var h='';
+  for(var i=solves.length-1;i>=0;i--){
+    h+='<div class="srow"><span class="n">'+(i+1)+'</span><span class="tm">'+fmt(solves[i].t)+'</span>'+
+      '<span class="sc">'+solves[i].scr+'</span><button class="x" data-i="'+i+'">&times;</button></div>';
+  }
+  $('solves').innerHTML=h;
+  document.querySelectorAll('.srow .x').forEach(function(b){
+    b.onclick=function(){ solves.splice(parseInt(b.getAttribute('data-i')),1); save(); renderAll(); };
+  });
+}
+function renderAll(){ renderScr(); renderStats(); renderSolves(); }
+function tick(){
+  elapsed=Date.now()-startTs;
+  $('clock').textContent=fmt(elapsed);
+}
+function startRun(){
+  phase='running'; startTs=Date.now(); elapsed=0;
+  $('timerbox').classList.remove('ready','holding');
+  rafT=setInterval(tick,31);
+}
+function stopRun(){
+  clearInterval(rafT);
+  elapsed=Date.now()-startTs;
+  phase='idle';
+  $('clock').textContent=fmt(elapsed);
+  solves.push({t:elapsed, scr:scr});
+  save();
+  scr=newScramble();
+  renderAll();
+}
+function pressDown(){
+  if(phase==='running'){ stopRun(); return; }
+  if(phase==='idle'){ phase='holding'; holdT0=Date.now(); $('timerbox').classList.add('holding'); }
+}
+function pressUp(){
+  if(phase==='holding'){
+    $('timerbox').classList.remove('holding');
+    if(Date.now()-holdT0>=350){ phase='ready'; $('timerbox').classList.add('ready'); }
+    else phase='idle';
+  } else if(phase==='ready'){ startRun(); }
+}
+document.addEventListener('keydown',function(e){
+  if(e.repeat) return;
+  if(e.code==='Space'){ e.preventDefault(); pressDown(); }
+  else if(phase==='running'){ stopRun(); }
+});
+document.addEventListener('keyup',function(e){
+  if(e.code==='Space'){ e.preventDefault(); pressUp(); }
+});
+var tb=$('timerbox');
+tb.addEventListener('touchstart',function(e){ e.preventDefault(); pressDown(); },{passive:false});
+tb.addEventListener('touchend',function(e){ e.preventDefault(); pressUp(); },{passive:false});
+$('newscr').onclick=function(){ if(phase==='running') return; scr=newScramble(); renderScr(); };
+$('clear').onclick=function(){ if(phase==='running') return; solves=[]; save(); renderAll(); };
+renderAll();
+</script>
+</body>
+</html>
