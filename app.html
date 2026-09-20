@@ -140,16 +140,23 @@ function stopRun(){
   scr=newScramble();
   renderAll();
 }
+var holdTimer=null;
 function pressDown(){
   if(phase==='running'){ stopRun(); return; }
-  if(phase==='idle'){ phase='holding'; holdT0=Date.now(); $('timerbox').classList.add('holding'); }
+  if(phase==='idle'){
+    phase='holding'; holdT0=Date.now();
+    $('timerbox').classList.add('holding');
+    holdTimer=setTimeout(function(){
+      if(phase==='holding'){ $('timerbox').classList.remove('holding'); $('timerbox').classList.add('ready'); }
+    },350);
+  }
 }
 function pressUp(){
   if(phase==='holding'){
-    $('timerbox').classList.remove('holding');
-    if(Date.now()-holdT0>=350){ phase='ready'; $('timerbox').classList.add('ready'); }
-    else phase='idle';
-  } else if(phase==='ready'){ startRun(); }
+    clearTimeout(holdTimer);
+    if(Date.now()-holdT0>=350){ startRun(); }
+    else{ phase='idle'; $('timerbox').classList.remove('holding','ready'); }
+  }
 }
 document.addEventListener('keydown',function(e){
   if(e.repeat) return;
